@@ -23,6 +23,8 @@ enum Commands {
     },
     Buffered {
     },
+    Whole {
+    },
 }
 
 
@@ -35,7 +37,10 @@ fn main() {
         },
         Commands::Buffered {} => {
             process_buffered();
-        }
+        },
+        Commands::Whole {} => {
+            process_whole();
+        },
     }
 }
 
@@ -56,7 +61,7 @@ fn process_raw() {
         println!("{}", "Starting price_per");
         while Path::new(&(price_path.to_owned() + "price_per_" + &format!("{:020}", price_file_num))).is_file() {
             if row_num % debug_print_num == 0 {
-                println!("price_per row: {}", row_num);
+                println!("price_per rows: {}", row_num);
             }
             let mut file = OpenOptions::new()
                     .read(true)
@@ -78,7 +83,7 @@ fn process_raw() {
         println!("{}", "Starting quantity");
         while Path::new(&(quantity_path.to_owned() + "quantity_" + &format!("{:020}", quantity_file_num))).is_file() {
             if row_num % debug_print_num == 0 {
-                println!("quantity row: {}", row_num);
+                println!("quantity rows: {}", row_num);
             }
             let mut file = OpenOptions::new()
                     .read(true)
@@ -118,7 +123,7 @@ fn process_buffered() {
         println!("{}", "Starting price_per");
         while Path::new(&(price_path.to_owned() + "price_per_" + &format!("{:020}", price_file_num))).is_file() {
             if row_num % debug_print_num == 0 {
-                println!("price_per row: {}", row_num);
+                println!("price_per rows: {}", row_num);
             }
             let file = OpenOptions::new()
                     .read(true)
@@ -141,7 +146,7 @@ fn process_buffered() {
         println!("{}", "Starting quantity");
         while Path::new(&(quantity_path.to_owned() + "quantity_" + &format!("{:020}", quantity_file_num))).is_file() {
             if row_num % debug_print_num == 0 {
-                println!("quantity row: {}", row_num);
+                println!("quantity rows: {}", row_num);
             }
             let file = OpenOptions::new()
                     .read(true)
@@ -165,3 +170,70 @@ fn process_buffered() {
     }
 }
 
+fn process_whole() {
+    let order_products_dir = DATA_DIRECTORY.to_owned()+"order_products/";
+
+    let mut count: u64 = 0;
+    let debug_print_num: u64 = 100_000;
+    let mut total_price_per: Decimal = Decimal::new(0, 0);
+    let mut total_quantity: u64 = 0;
+
+    {
+        // Process Order Price
+        let price_path: String = order_products_dir.to_owned() + "price_per/";
+        let price_size: usize = mem::size_of::<Decimal>();
+        let mut price_file_num: u64 = 0;
+        let mut row_num: u64 = 0;
+        println!("{}", "Starting price_per");
+        while Path::new(&(price_path.to_owned() + "price_per_" + &format!("{:020}", price_file_num))).is_file() {
+            if row_num % debug_print_num == 0 {
+                println!("price_per rows: {}", row_num);
+            }
+            let mut file = OpenOptions::new()
+                    .read(true)
+                    .open(&(price_path.to_owned() + "price_per_" + &format!("{:020}", price_file_num)))
+                    .unwrap();
+            let mut buffer: Vec<u8> = Vec::new();
+            let read_bytes = file.read_to_end(&mut buffer).unwrap();
+            let mut file_counter: usize = 0;
+            while file_counter < read_bytes {
+                total_price_per += Decimal::deserialize(buffer[file_counter..file_counter+16].try_into().unwrap());
+                row_num += 1;
+                count += 1;
+                file_counter += price_size;
+
+            }
+            price_file_num += 1;
+        }
+        let quantity_path: String = order_products_dir + "quantity/";
+        let quantity_size = mem::size_of::<u64>();
+        let mut quantity_file_num: u64 = 0;
+        row_num = 0;
+        println!("{}", "Starting quantity");
+        while Path::new(&(quantity_path.to_owned() + "quantity_" + &format!("{:020}", quantity_file_num))).is_file() {
+            if row_num % debug_print_num == 0 {
+                println!("quantity rows: {}", row_num);
+            }
+            let mut file = OpenOptions::new()
+                    .read(true)
+                    .open(&(quantity_path.to_owned() + "quantity_" + &format!("{:020}", quantity_file_num)))
+                    .unwrap();
+            let mut buffer: Vec<u8> = Vec::new();
+            let read_bytes = file.read_to_end(&mut buffer).unwrap();
+            let mut file_counter: usize = 0;
+            while file_counter < read_bytes {
+                total_quantity += u64::from_be_bytes(buffer[file_counter..file_counter+8].try_into().unwrap());
+                row_num += 1;
+                count += 1;
+                file_counter += quantity_size;
+
+            }
+            quantity_file_num += 1;
+        }
+        println!("Count: {}", count);
+        println!("Average Price: {}", total_price_per/Decimal::new(count.try_into().unwrap(), 0));
+        println!("Total Price: {}", total_price_per);
+        println!("Average Quantity: {}", total_quantity/count);
+        println!("Total Quantity: {}", total_quantity);
+    }
+}
